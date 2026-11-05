@@ -24,10 +24,9 @@
       <h1>Scanner QR Inventaris</h1>
       <p class="sub">Arahkan kamera belakang ke QR Code barang. Setelah terbaca, hasil akan dikirim otomatis ke aplikasi Inventaris.</p>
       <div id="reader"></div>
-      <div class="status" id="status">Tekan tombol Mulai Kamera, lalu izinkan akses kamera.</div>
+      <div class="status" id="status">Membuka kamera secara otomatis. Izinkan akses kamera jika diminta.</div>
       <div class="actions">
-        <button id="start" type="button">Mulai Kamera</button>
-        <button id="stop" type="button" disabled>Matikan Kamera</button>
+        <button id="stop" type="button" disabled>Tutup Kamera</button>
       </div>
       <div class="hint">Pastikan tab aplikasi Inventaris tetap terbuka saat melakukan pemindaian.</div>
     </section>
@@ -35,13 +34,11 @@
 <script>
 (() => {
   const statusEl = document.getElementById('status');
-  const startBtn = document.getElementById('start');
   const stopBtn = document.getElementById('stop');
   let scanner = null;
   let locked = false;
 
   function setRunning(running) {
-    startBtn.disabled = running;
     stopBtn.disabled = !running;
   }
 
@@ -108,12 +105,16 @@
     }
   }
 
-  startBtn.addEventListener('click', startScanner);
   stopBtn.addEventListener('click', async () => {
     await stopScanner();
-    statusEl.textContent = 'Kamera dimatikan.';
+    statusEl.textContent = 'Kamera ditutup. Anda dapat menutup tab ini dan kembali ke aplikasi Inventaris.';
   });
   window.addEventListener('pagehide', () => { if (scanner && scanner.isScanning) scanner.stop().catch(()=>{}); });
+
+  // Mulai otomatis saat tab scanner dibuka dari tombol Scan dengan Kamera di aplikasi.
+  window.addEventListener('load', () => {
+    startScanner();
+  }, { once: true });
 })();
 </script>
 </body>
