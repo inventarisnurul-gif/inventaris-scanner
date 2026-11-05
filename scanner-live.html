@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#111827">
+  <title>Scanner QR — Inventaris</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;padding:22px;background:#0f172a;color:#f8fafc;font-family:Arial,sans-serif;display:flex;justify-content:center;align-items:center}
+    .wrap{width:min(100%,620px);text-align:center}.card{background:#1e293b;border:1px solid #334155;border-radius:22px;padding:22px;box-shadow:0 20px 60px #0005}
+    h1{font-size:22px;margin:0 0 8px}.sub{color:#cbd5e1;font-size:14px;line-height:1.5;margin:0 0 18px}
+    #reader{width:100%;overflow:hidden;border:1px solid #475569;border-radius:16px;background:#020617;min-height:80px}
+    #reader video{object-fit:cover!important;border-radius:12px}
+    .status{margin:16px 0;color:#cbd5e1;font-size:14px;line-height:1.5;min-height:22px}
+    .actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}button{border:0;border-radius:12px;padding:12px 18px;font-size:14px;font-weight:700;cursor:pointer}
+    #start{background:#6366f1;color:white}#stop{background:#475569;color:white}button:disabled{opacity:.55;cursor:not-allowed}
+    .hint{font-size:12px;color:#94a3b8;margin-top:16px}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <h1>Scanner QR Inventaris</h1>
+      <p class="sub">Arahkan kamera belakang ke QR Code barang. Setelah terbaca, hasil akan dikirim otomatis ke aplikasi Inventaris.</p>
+      <div id="reader"></div>
+      <div class="status" id="status">Tekan tombol Mulai Kamera, lalu izinkan akses kamera.</div>
+      <div class="actions">
+        <button id="start" type="button">Mulai Kamera</button>
+        <button id="stop" type="button" disabled>Matikan Kamera</button>
+      </div>
+      <div class="hint">Pastikan tab aplikasi Inventaris tetap terbuka saat melakukan pemindaian.</div>
+    </section>
+  </main>
+<script>
+(() => {
+  const statusEl = document.getElementById('status');
+  const startBtn = document.getElementById('start');
+  const stopBtn = document.getElementById('stop');
+  let scanner = null;
+  let locked = false;
+
+  function setRunning(running) {
+    startBtn.disabled = running;
+    stopBtn.disabled = !running;
+  }
+
+  async function stopScanner() {
+    if (!scanner) { setRunning(false); return; }
+    try {
+      if (scanner.isScanning) await scanner.stop();
+      await scanner.clear();
+    } catch (e) { console.warn('Stop scanner:', e); }
+    scanner = null;
+    setRunning(false);
+  }
+
+  async function startScanner() {
+    if (scanner) return;
+    if (!window.isSecureContext || !navigator.mediaDevices) {
+      statusEl.textContent = 'Kamera memerlukan halaman HTTPS dan browser yang mendukung akses kamera.';
+      return;
+    }
+    if (typeof Html5Qrcode === 'undefined') {
+      statusEl.textContent = 'Library scanner gagal dimuat. Periksa koneksi internet lalu muat ulang halaman.';
+      return;
+    }
+    locked = false;
+    scanner = new Html5Qrcode('reader');
+    setRunning(true);
+    statusEl.textContent = 'Meminta izin kamera...';
+    try {
+      await scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: (w,h) => { const s=Math.min(w,h); const q=Math.min(280,s*0.75); return {width:q,height:q}; }, aspectRatio: 1 },
+        async (decodedText) => {
+          if (locked) return;
+          locked = true;
+          statusEl.textContent = 'QR terbaca. Mengirim hasil ke aplikasi Inventaris...';
+          if (navigator.vibrate) navigator.vibrate(150);
+          try {
+            if (window.opener && !window.opener.closed) {
+              window.opener.postMessage({ type: 'INVENTARIS_QR_SCAN', code: decodedText }, '*');
+              statusEl.textContent = 'Berhasil! Kembali ke tab aplikasi Inventaris.';
+              await stopScanner();
+              setTimeout(() => window.close(), 450);
+            } else {
+              statusEl.textContent = 'QR terbaca: ' + decodedText + '. Tab aplikasi tidak terhubung; buka scanner dari tombol di aplikasi Inventaris.';
+              locked = false;
+            }
+          } catch (e) {
+            statusEl.textContent = 'QR terbaca, tetapi gagal mengirim ke aplikasi. ' + e.message;
+            locked = false;
+          }
+        },
+        () => {}
+      );
+      statusEl.textContent = 'Kamera aktif. Arahkan QR Code ke area pemindaian.';
+    } catch (err) {
+      console.error(err);
+      await stopScanner();
+      const msg = String(err && (err.message || err));
+      if (msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('denied')) {
+        statusEl.textContent = 'Izin kamera ditolak. Izinkan kamera untuk situs GitHub Pages ini melalui pengaturan browser, lalu coba lagi.';
+      } else {
+        statusEl.textContent = 'Kamera gagal dimulai: ' + msg;
+      }
+    }
+  }
+
+  startBtn.addEventListener('click', startScanner);
+  stopBtn.addEventListener('click', async () => {
+    await stopScanner();
+    statusEl.textContent = 'Kamera dimatikan.';
+  });
+  window.addEventListener('pagehide', () => { if (scanner && scanner.isScanning) scanner.stop().catch(()=>{}); });
+})();
+</script>
+</body>
+</html>
